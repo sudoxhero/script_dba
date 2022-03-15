@@ -75,4 +75,3 @@ AND is1.index_columns_keys_ids = is2.index_columns_keys_ids           
 AND is1.included_columns_ids = is2.included_columns_ids                            
 AND is1.filter_definition = is2.filter_definition                            
 AND is1.is_unique = is2.is_unique; 
-
