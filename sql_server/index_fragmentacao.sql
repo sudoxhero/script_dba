@@ -22,6 +22,7 @@ WHERE
    AND ps.alloc_unit_type_desc IN ( N'IN_ROW_DATA', N'ROW_OVERFLOW_DATA')
    AND database_id = DB_ID() 
    AND page_count > 500 
+   AND ps.avg_fragmentation_in_percent >= 15
 ORDER BY
    avg_fragmentation_in_percent DESC 
 OPTION (RECOMPILE);
