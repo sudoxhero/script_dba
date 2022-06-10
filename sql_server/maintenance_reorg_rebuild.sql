@@ -102,32 +102,6 @@ PRINT @ReorgOrRebuildCommand
 PRINT ''
 EXEC (@ReorgOrRebuildCommand);
 
-DECLARE @ResultAfter nvarchar(max)
-
-SELECT @ResultAfter =
-'
-Fragmentation Percent: '+convert(nvarchar,ps.avg_fragmentation_in_percent)+'
-Index: '+SCHEMA_NAME(tbl.schema_id)+'.'+OBJECT_NAME(ps.object_id)+'.'+i.name
-FROM
-   sys.dm_db_index_physical_stats(DB_ID(), NULL, NULL, NULL , 'DETAILED') AS ps 
-   INNER JOIN
-      sys.indexes AS i WITH (NOLOCK) 
-      ON ps.[object_id] = i.[object_id] 
-      AND ps.index_id = i.index_id 
-   INNER JOIN 
-      sys.tables as tbl WITH (NOLOCK) 
-      ON ps.object_id = tbl.object_id
-WHERE
-SCHEMA_NAME(tbl.schema_id) = @SchemaName
-AND OBJECT_NAME(ps.object_id) = @TableName
-AND i.name = @IndexName
-OPTION (RECOMPILE)
-
-PRINT @ResultAfter
-
-PRINT ''
-PRINT '#################################################################################################################################'
-
 FETCH NEXT FROM reorg_rebuild_cursor INTO @SchemaName,@TableName,@IndexName,@FragmentationPercent,@ReorgOrRebuildCommand
 END
 CLOSE reorg_rebuild_cursor;
