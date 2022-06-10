@@ -18,8 +18,8 @@ CREATE OR ALTER PROCEDURE sp_reorg_rebuild @isReport INT = NULL AS
 
 --*******************************************************
 -- Mode Use:
--- Para gerar apenas relatório execute : exec sp_reorg_rebuild 1
--- Para realizar o procedimento execute : exec sp_reorg_rebuild
+-- Para gerar apenas relatório execute : exec sp_reorg_rebuild 0
+-- Para realizar o procedimento execute : exec sp_reorg_rebuild 1
 
 --*******************************************************
 -- Modification history:
