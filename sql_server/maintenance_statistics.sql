@@ -36,7 +36,7 @@ IF OBJECT_ID('tempdb..#tmpUpdateStatistics') IS NOT NULL
 DROP TABLE #tmpUpdateStatistics;
 
 SELECT
-DISTINCT 'UPDATE STATISTICS '+OBJECT_NAME(stat.object_id)+' WITH FULLSCAN;' as [UpdateStatisticsCommand]
+DISTINCT 'UPDATE STATISTICS '+SCHEMA_NAME(tbl.schema_id)+'.'+OBJECT_NAME(stat.object_id)+' WITH FULLSCAN;' as [UpdateStatisticsCommand]
 INTO #tmpUpdateStatistics
 FROM sys.stats AS stat
 CROSS APPLY sys.dm_db_stats_properties(stat.object_id, stat.stats_id) AS sp
@@ -85,7 +85,7 @@ last_updated,
 rows, 
 rows_sampled, 
 modification_counter,
-'UPDATE STATISTICS '+OBJECT_NAME(stat.object_id)+' WITH FULLSCAN;' as [UpdateStatisticsCommand]
+'UPDATE STATISTICS '+SCHEMA_NAME(tbl.schema_id)+'.'+OBJECT_NAME(stat.object_id)+' WITH FULLSCAN;' as [UpdateStatisticsCommand]
 FROM sys.stats AS stat
 CROSS APPLY sys.dm_db_stats_properties(stat.object_id, stat.stats_id) AS sp
 INNER JOIN sys.tables tbl ON stat.object_id = tbl.object_id
