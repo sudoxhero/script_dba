@@ -1,11 +1,11 @@
 set linesize 30000
-col "Tablespace Name" for a15
+col "Tablespace Name" for a50
 col "Allocated (MB)" for 999999
 col "Free (MB)" for 999999
 col "Used (MB)" for 999999
 col "% Free" for 999
 col "% Used" for 999
-col "Max. Bytes (MB)" for 9999999
+col "Max. Bytes (MB)" for 99999999999
 
 select  a.tablespace_name as "Tablespace Name",
        round(a.bytes_alloc / 1024 / 1024) "Allocated (MB)",
@@ -39,4 +39,4 @@ and    p.tablespace_name(+) = h.tablespace_name
 and    f.file_id = h.file_id
 and    f.tablespace_name = h.tablespace_name
 group by h.tablespace_name
-ORDER BY 2;
+ORDER BY 6 DESC;
