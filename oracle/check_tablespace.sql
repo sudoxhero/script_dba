@@ -10,7 +10,7 @@ col "Next Extent (B)" for 999999
 col "Min. Extents" for 999999
 col "Max. Extents" for 9999999999999
 col "% Increase" for 999999
-col "Datafile Name" for a50
+col "Datafile Name" for a100
 col "File ID" for 999999
 
 

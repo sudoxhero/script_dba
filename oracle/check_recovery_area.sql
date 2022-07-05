@@ -5,6 +5,7 @@ prompt ###################################
 show parameter db_recovery_file_dest
 
 set linesize 30000
+col space_limit for 9999999999999
 col name for a50
 
 select * from v$recovery_file_dest;
