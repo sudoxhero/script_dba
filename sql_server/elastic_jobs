@@ -72,3 +72,10 @@ SELECT * FROM jobs.jobs;
 SELECT js.* FROM jobs.jobsteps js
 JOIN jobs.jobs j
   ON j.job_id = js.job_id AND j.job_version = js.job_version;
+
+
+##############
+## REFERENCIA:
+##############
+
+https://learn.microsoft.com/en-us/azure/azure-sql/database/elastic-jobs-tsql-create-manage?view=azuresql#job-stored-procedures
