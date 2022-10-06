@@ -1,0 +1,69 @@
+CREATE MASTER KEY ENCRYPTION BY PASSWORD='AzureSQL@123';   
+CREATE DATABASE SCOPED CREDENTIAL JobExecuter WITH IDENTITY = 'SQLJobUser', SECRET = 'AzureSQL@123'; 
+
+EXEC jobs.sp_add_target_group 'AzureProductionServers'
+
+EXEC jobs.sp_add_target_group_member
+'AzureProductionServers',
+@target_type =  N'SqlDatabase',
+@server_name='sudoxhero.database.windows.net',
+@database_name =N'sudoxhero'
+
+-- use master
+-- CREATE LOGIN SQLJobUser WITH PASSWORD = 'AzureSQL@123';
+
+use sudoxhero
+
+Create user SQLJobUser from login SQLJobUser
+     
+ALTER ROLE db_owner ADD MEMBER [SQLJobUser] ;  
+
+EXEC jobs.sp_add_job @job_name='DBA – Index Maintenance', @description='This Job performs index maintenance on every sunday at 12:00 AM'
+
+EXEC jobs.sp_add_jobstep @job_name='DBA – Index Maintenance',
+@command=N' exec sp_index_maintenance ',
+@credential_name='JobExecuter',
+@target_group_name='AzureProductionServers'
+
+EXEC jobs.sp_update_job
+    @job_name='DBA – Index Maintenance',
+    @enabled=1,
+    @schedule_interval_type='Weeks',
+    @schedule_interval_count=1,
+    @schedule_start_time= N'20221006 12:39';
+
+
+
+
+
+
+
+exec [jobs].[sp_start_job] 'DBA – Index Maintenance'
+
+
+select 
+job_name,
+lifecycle,
+start_time,
+end_time,
+current_attempts,
+last_message
+from jobs.job_executions order by start_time desc
+
+
+
+select b.name,a.lifecycle,start_time, end_time from 
+[jobs_internal].[job_executions] a 
+inner join 
+[jobs_internal].[jobs] b on 
+a.job_id=b.job_id
+
+
+SELECT * FROM jobs.target_groups 
+SELECT * FROM jobs.target_group_members 
+
+SELECT * FROM jobs.jobs;
+
+SELECT js.* FROM jobs.jobsteps js
+JOIN jobs.jobs j
+  ON j.job_id = js.job_id AND j.job_version = js.job_version;
