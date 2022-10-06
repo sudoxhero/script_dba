@@ -1,0 +1,74 @@
+-- Criando Master Key
+CREATE MASTER KEY ENCRYPTION BY PASSWORD='AzureSQL@123';   
+CREATE DATABASE SCOPED CREDENTIAL JobExecuter WITH IDENTITY = 'SQLJobUser', SECRET = 'AzureSQL@123'; 
+
+-- Criando grupo
+EXEC jobs.sp_add_target_group 'AzureProductionServers'
+
+-- Adicionando server no grupo
+EXEC jobs.sp_add_target_group_member
+'AzureProductionServers',
+@target_type =  N'SqlDatabase',
+@server_name='sudoxhero.database.windows.net',
+@database_name =N'sudoxhero'
+
+-- Criando usuario na master
+use master
+CREATE LOGIN SQLJobUser WITH PASSWORD = 'AzureSQL@123';
+
+-- Criando usuario 
+use sudoxhero
+
+Create user SQLJobUser from login SQLJobUser
+     
+ALTER ROLE db_owner ADD MEMBER [SQLJobUser] ;  
+
+-- Criando job
+EXEC jobs.sp_add_job @job_name='DBA – Index Maintenance', @description='This Job performs index maintenance on every sunday at 12:00 AM'
+
+-- Adicionando etapa de execução ao job
+EXEC jobs.sp_add_jobstep @job_name='DBA – Index Maintenance',
+@command=N' exec sp_index_maintenance ',
+@credential_name='JobExecuter',
+@target_group_name='AzureProductionServers'
+
+-- Atualizando com informações do intervalo de execução
+EXEC jobs.sp_update_job
+    @job_name='DBA – Index Maintenance',
+    @enabled=1,
+    @schedule_interval_type='Weeks',
+    @schedule_interval_count=1,
+    @schedule_start_time= N'20221006 12:39';
+
+
+########################
+## Executar Manualmente
+########################
+
+exec [jobs].[sp_start_job] 'DBA – Index Maintenance'
+
+########################
+## Cancelar um job
+########################
+
+###########################
+## Visualizar as execuções
+###########################
+
+select 
+job_name,
+lifecycle,
+start_time,
+end_time,
+current_attempts,
+last_message
+from jobs.job_executions order by start_time desc
+
+SELECT * FROM jobs.target_groups 
+SELECT * FROM jobs.target_group_members 
+
+SELECT * FROM jobs.jobs;
+
+SELECT js.* FROM jobs.jobsteps js
+JOIN jobs.jobs j
+  ON j.job_id = js.job_id AND j.job_version = js.job_version;
