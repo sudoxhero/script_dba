@@ -51,6 +51,15 @@ exec [jobs].[sp_start_job] 'DBA – Index Maintenance'
 ## Cancelar um job
 ########################
 
+-- View all active executions to determine job execution id
+SELECT * FROM jobs.job_executions
+WHERE is_active = 1 AND job_name = 'DBA – Index Maintenance'
+ORDER BY start_time DESC;
+GO
+
+-- Cancel job execution with the specified job execution id
+EXEC jobs.sp_stop_job '01234567-89ab-cdef-0123-456789abcdef';
+
 ###########################
 ## Visualizar as execuções
 ###########################
