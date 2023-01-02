@@ -1,0 +1,163 @@
+##############################################
+## Configurando RedHat com Azure CLI
+##############################################
+
+https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/deploying_red_hat_enterprise_linux_8_on_public_cloud_platforms/assembly_deploying-a-rhel-image-as-a-virtual-machine-on-microsoft-azure_cloud-content#install-the-azure-cli_deploying-a-virtual-machine-on-microsoft-azure
+
+Import the Microsoft repository key.
+
+$ sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+Create a local Azure CLI repository entry.
+
+$ sudo sh -c 'echo -e "[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
+Update the yum package index.
+
+$ yum check-update
+Check your Python version (python --version) and install Python 3.x, if necessary.
+
+$ sudo yum install python3
+Install the Azure CLI.
+
+$ sudo yum install -y azure-cli
+Run the Azure CLI.
+
+$ az
+
+##############################################
+## Logando
+##############################################
+
+az login
+
+OBS: vai abrir browser onde precisa colocar a senha que esta no console
+[root@SudoxHero ~]# az login
+To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code FDADYLE4H to authenticate.
+
+
+##############################################
+## Criando arquivo de exemplo para fazer upload
+##############################################
+
+mkdir /home/sudoxhero/dump/dump.dmp
+
+https://learn.microsoft.com/en-us/cli/azure/storage/azcopy/blob?view=azure-cli-latest#az-storage-azcopy-blob-upload
+
+Comando para enviar o arquivo para o container
+
+Ex: vai substituir MyContainer pelo nome do container e substituir MyStorageAccount pelo nome do storage account e colocar o caminho do arquivo no parametro -s
+az storage azcopy blob upload -c MyContainer --account-name MyStorageAccount -s "path/to/directory" --recursive
+
+Exemplo real abaixo:
+az storage azcopy blob upload -c backup --account-name testmongo -s "/home/sudoxhero/dump/dump.dmp" --recursive
+
+Resultado da saida será semelhante a:
+
+[root@SudoxHero dump]# az storage azcopy blob upload -c backup --account-name testmongo -s "/home/sudoxhero/dump/dump.dmp" --recursive          There are no credentials provided in your command and environment, we will query for the account key inside your storage account.
+Please provide --connection-string, --account-key or --sas-token as credentials, or use `--auth-mode login` if you have required RBAC roles in your command. For more information about RBAC roles in storage, visit https://docs.microsoft.com/en-us/azure/storage/common/storage-auth-aad-rbac-cli.
+Setting the corresponding environment variables can avoid inputting credentials in your command. Please use --help to get more information.
+Azcopy command: ['/root/.azure/cliextensions/storage-preview/azext_storage_preview/azcopy/azcopy_linux_amd64_10.5.0/azcopy', 'copy', '/home/sudoxhero/dump/dump.dmp', 'https://testmongo.blob.core.windows.net/backup/?se=2023-01-03T21%3A17%3A13Z&sp=rwdlacup&sv=2018-03-28&ss=b&srt=sco&sig=4gRPiHrv25PP0oNBlqxWJ7N13ptNeyFhInA9iiT/h8M%3D', '--recursive']
+INFO: Scanning...
+INFO: Any empty folders will not be processed, because source and/or destination doesn't have full folder support
+
+Job 8ff637b3-267b-2043-6ee1-0c787293dc93 has started
+Log file is located at: /root/.azcopy/8ff637b3-267b-2043-6ee1-0c787293dc93.log
+
+INFO: azcopy: A newer version 10.16.2 is available to download
+
+0.0 %, 0 Done, 0 Failed, 1 Pending, 0 Skipped, 1 Total,
+
+
+Job 8ff637b3-267b-2043-6ee1-0c787293dc93 summary
+Elapsed Time (Minutes): 0.0333
+Number of File Transfers: 1
+Number of Folder Property Transfers: 0
+Total Number of Transfers: 1
+Number of Transfers Completed: 1
+Number of Transfers Failed: 0
+Number of Transfers Skipped: 0
+TotalBytesTransferred: 7
+Final Job Status: Completed
+
+[root@SudoxHero dump]#
+
+
+##############################################
+## Instalando Azure CLI no windows
+##############################################
+
+https://learn.microsoft.com/pt-br/cli/azure/install-azure-cli-windows?tabs=winget
+
+Se tiver o winget é melhor
+winget install -e --id Microsoft.AzureCLI
+
+reabre o terminal para carregar o profile
+
+##############################################
+## Logando
+##############################################
+
+az login
+
+OBS: vai abrir browser para logar
+
+##############################################
+## Fazendo download do arquivo 
+##############################################
+
+https://learn.microsoft.com/en-us/cli/azure/storage/azcopy/blob?view=azure-cli-latest#az-storage-azcopy-blob-download
+
+Criando a pasta que vai receber o arquivo
+
+mkdir C:\Users\emano\restore
+
+Comando para fazer download do arquivo
+
+Ex: vai substituir MyContainer pelo nome do container e substituir MyStorageAccount pelo nome do storage account e colocar nome do arquivo no -s e no -d vai colocar o caminho onde vai fazer o download
+az storage azcopy blob download -c MyContainer --account-name MyStorageAccount -s "path/to/virtual_directory" -d "download/path" --recursive
+
+Exemplo real abaixo:
+az storage azcopy blob download -c backup --account-name testmongo -s "dump.dmp" -d "C:\Users\emano\restore\" --recursive
+
+Resultado da saida será semelhante a:
+
+ az storage azcopy blob download -c backup --account-name testmongo -s "dump.dmp" -d "C:\Users\emano\restore\" --recursive
+There are no credentials provided in your command and environment, we will query for the account key inside your storage account.
+Please provide --connection-string, --account-key or --sas-token as credentials, or use `--auth-mode login` if you have required RBAC roles in your command. For more information about RBAC roles in storage, visit https://docs.microsoft.com/en-us/azure/storage/common/storage-auth-aad-rbac-cli.
+Setting the corresponding environment variables can avoid inputting credentials in your command. Please use --help to get more information.
+Namespace(_log_verbosity_verbose=False, _log_verbosity_debug=False, _log_verbosity_only_show_errors=False, _output_format='json', _command_package='storage', _subcommand='download', account_name='testmongo', account_key='DUfIDSOPlNyOHO4JX4FlrKfCz2ges6fWS1fWUNaocFFzy4/xhgGTW9eKLsGTXPIsK+uzltmeI6rZ+AStISZztA==', connection_string=None, sas_token=None, _subscription=None, cmd=<azure.cli.core.commands.AzCliCommand object at 0x05A87958>, source='https://testmongo.blob.core.windows.net/backup/dump.dmp', destination='C:\\Users\\emano\\restore\\', recursive=True, func=<azure.cli.core.commands.AzCliCommand object at 0x053B4A48>, command='storage azcopy blob download', _cmd=<azure.cli.core.commands.AzCliCommand object at 0x05A87958>, _command_validator=None, _argument_validators=[<function validate_client_parameters at 0x053BD220>, <function validate_azcopy_download_source_url at 0x053BD3D0>], _parser=AzCliCommandParser(prog='az storage azcopy blob download', usage=None, description='', formatter_class=<class 'argparse.HelpFormatter'>, conflict_handler='error', add_help=True))
+Azcopy command: ['C:\\Users\\emano\\.azure\\cliextensions\\storage-preview\\azext_storage_preview\\azcopy\\azcopy_windows_amd64_10.5.0\\azcopy.exe', 'copy', 'https://testmongo.blob.core.windows.net/backup/dump.dmp?se=2023-01-03T21%3A36%3A03Z&sp=rwdlacup&sv=2018-03-28&ss=b&srt=sco&sig=7iB6Rf7oQrOrlqfBeJ%2Bm9pHxLuB%2BR9O3nclyR5H2LJs%3D', 'C:\\Users\\emano\\restore\\', '--recursive']
+INFO: Scanning...
+INFO: Any empty folders will not be processed, because source and/or destination doesn't have full folder support
+
+Job 01972b56-50ff-9643-7ea9-71eab33192f1 has started
+Log file is located at: C:\Users\emano\.azcopy\01972b56-50ff-9643-7ea9-71eab33192f1.log
+
+INFO: azcopy.exe: A newer version 10.16.2 is available to download
+
+0.0 %, 0 Done, 0 Failed, 1 Pending, 0 Skipped, 1 Total,
+
+
+Job 01972b56-50ff-9643-7ea9-71eab33192f1 summary
+Elapsed Time (Minutes): 0.0333
+Number of File Transfers: 1
+Number of Folder Property Transfers: 0
+Total Number of Transfers: 1
+Number of Transfers Completed: 1
+Number of Transfers Failed: 0
+Number of Transfers Skipped: 0
+TotalBytesTransferred: 7
+Final Job Status: Completed
+
+ emano@SudoxHero  ~ 
+
+ emano@SudoxHero  ~  restore 
+❯ ls
+
+
+    Directory: C:\Users\emano\restore
+
+
+Mode                LastWriteTime         Length Name
+----                -------------         ------ ----
+-a----       02/01/2023     18:36              7   dump.dmp
+
