@@ -1,0 +1,992 @@
+
+#!/bin/bash
+
+ORACLE_SID=$1
+
+# Variáveis de ambiente
+export ORACLE_SID=${ORACLE_SID}
+export ORACLE_BASE=/opt/u01
+if [ "$(hostname)" == "drjscgerlx017" ]; then
+    export ORACLE_HOME=/opt/u01/app/oracle/product/11.2.0/client_1/
+else
+    export ORACLE_HOME=/opt/u01/product/11.2.0/client_1/
+fi
+export TNS_ADMIN=$ORACLE_HOME/network/admin
+export NLS_LANG=AMERICAN_AMERICA.WE8ISO8859P1
+export NLS_DATE_FORMAT='dd/mm/yyyy hh24:mi:ss'
+export ORA_NLS10=$ORACLE_HOME/nls/data
+export ORA_SDTZ=DB_TZ
+export PATH=$PATH:$ORACLE_HOME/bin
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib
+
+# Diretório de log
+LOG_DIR="/producaoRJ/global/dba_producao/scripts/Check_criticas/p639366/log/$(date +'%Y%m%d')"
+mkdir -p "$LOG_DIR"
+HTML_FILE="$LOG_DIR/checklist_${ORACLE_SID}_$(date +'%Y%m%d_%H%M').html"
+
+# Configuração de e-mail
+EMAIL="p639366@corp.caixa.gov.br p965748@corp.caixa.gov.br p558249@corp.caixa.gov.br p598481@corp.caixa.gov.br p754494@corp.caixa.gov.br p547491@corp.caixa.gov.br p514244@corp.caixa.gov.br"
+ASSUNTO="Checklist Oracle ${ORACLE_SID}"
+
+# Caminho do script SQL
+SCRIPT_PATH="/producaoRJ/global/dba_producao/scripts/Check_criticas/p639366/scripts"
+
+# Funções
+cabecalho() {
+    {
+
+
+echo "<style>
+body { background-color: #f0f4f8; font-family: Arial; }
+table { border-collapse: collapse; width: 100%; font-family: Arial; }
+th { background-color: #bbdefb; color: #000; } /* Azul claro no cabeçalho */
+tr:nth-child(even) { background-color: #f9f9f9; } /* Linhas pares com cinza claro */
+tr:nth-child(odd) { background-color: #ffffff; } /* Linhas ímpares com branco */
+th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+
+/* Classes para indicadores críticos */
+.ok { background-color: #c8e6c9; }       /* Verde */
+.alerta { background-color: #fff9c4; }   /* Amarelo */
+.critico { background-color: #ffcdd2; }  /* Vermelho */
+</style>" >> "$HTML_FILE"
+
+        echo "<html><body>"
+        echo "<h3>######### Início do checklist do banco ${ORACLE_SID} às $(date +'%Y%m%d_%H%M%S') #########</h3>"
+    } >> "$HTML_FILE"
+}
+
+rodape() {
+    {
+        echo "<h3>######### Fim do checklist #########</h3>"
+        echo "</body></html>"
+    } >> "$HTML_FILE"
+}
+
+send_email() {
+    echo "Segue em anexo checklist." | mailx -a "$HTML_FILE" -s "$ASSUNTO" "$EMAIL"
+}
+
+get_db_version() {
+	#echo "Obtendo a versão do banco..."
+	DB_VERSION=$(sqlplus -s "/@${ORACLE_SID}" <<EOF
+whenever sqlerror exit failure
+set heading off
+set feedback off
+select version from v\$instance;
+exit;
+EOF
+)
+
+	DB_VERSION_NUMERIC=$(echo "$DB_VERSION" | cut -d '.' -f 1)
+
+}
+
+check_instance() {
+if [[ $DB_VERSION_NUMERIC -gt 11 ]]; then
+    {
+        echo "<h3>Check Instance</h3>"
+	echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>INST_ID</th><th>DB_UNIQUE_NAME</th><th>INSTANCE_NAME</th><th>HOST_NAME</th><th>UPTIME</th><th>OPEN_MODE</th><th>PROTECTION_MODE</th><th>LOGINS</th><th>FLASHBACK_ON</th><th>DATABASE_ROLE</th><th>CDB</th><th>VERSION</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+
+SELECT '<tr>'
+|| '<td>' || i.inst_id || '</td>'
+|| '<td>' || d.db_unique_name || '</td>'
+|| '<td>' || i.instance_name || '</td>'
+|| '<td>' || i.host_name || '</td>'
+|| '<td class="' ||
+CASE 
+    WHEN (sysdate - i.startup_time) < 1 THEN 'critico'  -- Menos de 1 dia
+    ELSE 'ok'
+END || '">' ||
+(floor(sysdate - i.startup_time) || ' Dias ' ||
+trunc(24*((sysdate - i.startup_time)-trunc(sysdate - i.startup_time))) || ' Horas ' ||
+mod(trunc(1440*((sysdate - i.startup_time)-trunc(sysdate - i.startup_time))), 60) || ' Minutos') ||
+'</td>'
+|| '<td>' || d.open_mode || '</td>'
+|| '<td>' || d.protection_mode || '</td>'
+|| '<td>' || i.logins || '</td>'
+|| '<td>' || d.flashback_on || '</td>'
+|| '<td>' || d.database_role || '</td>'
+|| '<td>' || d.cdb || '</td>'
+|| '<td>' || i.version || '</td>'
+|| '</tr>'
+FROM gv\$instance i
+JOIN gv\$database d ON i.inst_id = d.inst_id
+ORDER BY i.inst_id;
+EOF
+    echo "</table>" >> "$HTML_FILE"
+else
+    {
+        echo "<h3>Check Instance</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>INST_ID</th><th>DB_UNIQUE_NAME</th><th>INSTANCE_NAME</th><th>HOST_NAME</th><th>UPTIME</th><th>OPEN_MODE</th><th>PROTECTION_MODE</th><th>LOGINS</th><th>FLASHBACK_ON</th><th>DATABASE_ROLE</th><th>VERSION</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT '<tr>'
+|| '<td>' || i.inst_id || '</td>'
+|| '<td>' || d.db_unique_name || '</td>'
+|| '<td>' || i.instance_name || '</td>'
+|| '<td>' || i.host_name || '</td>'
+|| '<td class="' ||
+CASE
+    WHEN (sysdate - i.startup_time) < 1 THEN 'critico'  -- Menos de 1 dia
+    ELSE 'ok'
+END || '">' ||
+(floor(sysdate - i.startup_time) || ' Dias ' ||
+trunc(24*((sysdate - i.startup_time)-trunc(sysdate - i.startup_time))) || ' Horas ' ||
+mod(trunc(1440*((sysdate - i.startup_time)-trunc(sysdate - i.startup_time))), 60) || ' Minutos') ||
+'</td>'
+|| '<td>' || d.open_mode || '</td>'
+|| '<td>' || d.protection_mode || '</td>'
+|| '<td>' || i.logins || '</td>'
+|| '<td>' || d.flashback_on || '</td>'
+|| '<td>' || d.database_role || '</td>'
+|| '<td>' || i.version || '</td>'
+|| '</tr>'
+FROM gv\$instance i
+JOIN gv\$database d ON i.inst_id = d.inst_id
+ORDER BY i.inst_id;
+EOF
+    echo "</table>" >> "$HTML_FILE"
+fi
+
+}
+
+check_pdb() {
+# Verificar se é CDB
+
+        CHECK_PDB=$(sqlplus -s "/@${ORACLE_SID}" <<EOF
+whenever sqlerror exit failure
+set heading off
+set feedback off
+select case cdb when 'YES' then 1 else 0 end from v\$database;
+exit;
+EOF
+)
+
+CHECK_PDB_NUMERIC=$(echo "$CHECK_PDB" | tr -d '[:space:]')
+
+if [ $CHECK_PDB_NUMERIC -gt 0 ]; then
+    {
+        echo "<h3>Verificação PDB</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>NAME</th><th>OPEN_MODE</th><th>OPEN_TIME</th></tr>"
+    } >> "$HTML_FILE"
+
+        sqlplus -s "/@${ORACLE_SID}" >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' || 
+    '<td>' || name || '</td>' ||
+    '<td>' || open_mode || '</td>' ||
+    '<td>' || open_time || '</td>' ||
+    '</tr>'
+from v\$pdbs;
+exit;
+EOF
+    echo "</table>" >> "$HTML_FILE"
+fi
+
+}
+
+check_resource_limit() {
+    {
+        echo "<h3>Limites de Recursos (Sessions, Transactions, Processes, Locks)</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>INST_ID</th><th>RESOURCE_NAME</th><th>CURRENT_UTILIZATION</th><th>MAX_UTILIZATION</th><th>LIMITE_CONFIGURADO</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' ||
+    '<td>' || rs.inst_id || '</td>' ||
+    '<td>' || rs.resource_name || '</td>' ||
+    '<td>' || rs.current_utilization || '</td>' ||
+    '<td>' || rs.max_utilization || '</td>' ||
+    '<td>' || par.value || '</td>' ||
+    '</tr>'
+FROM (
+    SELECT inst_id, resource_name, current_utilization, max_utilization
+    FROM gv\$resource_limit
+    WHERE REGEXP_LIKE(resource_name, 'transactions|sessions|processes|locks')
+) rs,
+(
+    SELECT inst_id, name, value
+    FROM gv\$parameter
+    WHERE name IN ('sessions','transactions','processes','locks')
+) par
+WHERE rs.resource_name = par.name
+  AND rs.inst_id = par.inst_id
+ORDER BY rs.resource_name, rs.inst_id;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_diskgroup() {
+    {
+        echo "<h3>ASM Diskgroups</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>NAME</th><th>STATE</th><th>TOTAL_MB</th><th>FREE_MB</th><th>USED_MB</th><th>%_USED</th><th>REQUIRED_MIRROR_FREE_MB</th><th>USABLE_FILE_MB</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+
+SELECT '<tr>'
+|| '<td>' || NAME || '</td>'
+|| '<td>' || STATE || '</td>'
+|| '<td>' || TOTAL_MB || '</td>'
+|| '<td>' || FREE_MB || '</td>'
+|| '<td>' || (TOTAL_MB - FREE_MB) || '</td>'
+|| '<td class="' ||
+CASE 
+    WHEN ((TOTAL_MB - FREE_MB)/TOTAL_MB)*100 >= 90 THEN 'critico'
+    WHEN ((TOTAL_MB - FREE_MB)/TOTAL_MB)*100 >= 70 THEN 'alerta'
+    ELSE 'ok'
+END || '">' || TRUNC(((TOTAL_MB - FREE_MB)/TOTAL_MB)*100) || '%</td>'
+|| '<td>' || REQUIRED_MIRROR_FREE_MB || '</td>'
+|| '<td>' || USABLE_FILE_MB || '</td>'
+|| '</tr>'
+FROM V\$ASM_DISKGROUP WHERE STATE = 'CONNECTED';
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_recovery_area() {
+    {
+        echo "<h3>Flash Recovery Area Usage</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>FILE_TYPE</th><th>PERCENT_SPACE_USED</th><th>PERCENT_SPACE_RECLAIMABLE</th><th>NUMBER_OF_FILES</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+
+SELECT '<tr>'
+|| '<td>' || file_type || '</td>'
+|| '<td class="' ||
+CASE 
+    WHEN percent_space_used >= 90 THEN 'critico'
+    WHEN percent_space_used >= 70 THEN 'alerta'
+    ELSE 'ok'
+END || '">' || percent_space_used || '%</td>'
+|| '<td>' || percent_space_reclaimable || '%</td>'
+|| '<td>' || number_of_files || '</td>'
+|| '</tr>'
+FROM v\$flash_recovery_area_usage;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_recovery_file() {
+    {
+        echo "<h3>Flash Recovery File Destination</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>NAME</th><th>SIZE_GB</th><th>USED_GB</th><th>SPACE_RECLAIMABLE_GB</th><th>PCT_USED</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' ||
+    '<td>' || name || '</td>' ||
+    '<td>' || ROUND(space_limit / 1024 / 1024 / 1024,2) || '</td>' ||
+    '<td>' || ROUND(space_used / 1024 / 1024 / 1024,2) || '</td>' ||
+    '<td>' || ROUND(space_reclaimable / 1024 / 1024 / 1024,2) || '</td>' ||
+    '<td>' || ROUND((space_used/space_limit)*100,2) || '%</td>' ||
+    '</tr>'
+FROM v\$recovery_file_dest;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_tablespace() {
+if [[ $DB_VERSION_NUMERIC -eq 11 ]] || [[ $CHECK_PDB_NUMERIC -eq 0 ]] ; then  
+    {
+        echo "<h3>Tablespaces (Permanent & Temporary)</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>TABLESPACE_NAME</th><th>ALLOCATED_GB</th><th>FREE_GB</th><th>USED_GB</th><th>USED_PCT</th><th>MAX_BYTES_GB</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT '<tr>'
+|| '<td>' || Tablespace_Name || '</td>'
+|| '<td>' || ROUND(Allocated_MB / 1024,2) || '</td>'
+|| '<td>' || ROUND(Free_MB / 1024,2) || '</td>'
+|| '<td>' || ROUND(Used_MB / 1024,2) || '</td>'
+|| '<td class="' ||
+CASE 
+    WHEN used_pct >= 90 THEN 'critico'
+    WHEN used_pct >= 70 THEN 'alerta'
+    ELSE 'ok'
+END || '">' || used_pct || '%</td>'
+|| '<td>' || ROUND(Max_Bytes_MB / 1024,2) || '</td>'
+|| '</tr>'
+FROM (
+    SELECT  a.tablespace_name AS Tablespace_Name,
+            ROUND(a.bytes_alloc / 1024 / 1024) Allocated_MB,
+            ROUND(NVL(b.bytes_free, 0) / 1024 / 1024) Free_MB,
+            ROUND((a.bytes_alloc - NVL(b.bytes_free, 0)) / 1024 / 1024) Used_MB,
+            ROUND((NVL(b.bytes_free, 0) / a.bytes_alloc) * 100) free_pct,
+            100 - ROUND((NVL(b.bytes_free, 0) / a.bytes_alloc) * 100) used_pct,
+            ROUND(maxbytes / 1024 / 1024) Max_Bytes_MB
+    FROM  ( SELECT f.tablespace_name,
+                   SUM(f.bytes) bytes_alloc,
+                   SUM(DECODE(f.autoextensible, 'YES', f.maxbytes, 'NO', f.bytes)) maxbytes
+            FROM dba_data_files f
+            GROUP BY tablespace_name) a,
+          ( SELECT f.tablespace_name,
+                   SUM(f.bytes) bytes_free
+            FROM dba_free_space f
+            GROUP BY tablespace_name) b
+    WHERE a.tablespace_name = b.tablespace_name (+)
+    UNION ALL
+    SELECT h.tablespace_name AS tablespace_name,
+           ROUND(SUM(h.bytes_free + h.bytes_used) / 1048576) megs_alloc,
+           ROUND(SUM((h.bytes_free + h.bytes_used) - NVL(p.bytes_used, 0)) / 1048576) megs_free,
+           ROUND(SUM(NVL(p.bytes_used, 0)) / 1048576) megs_used,
+           ROUND((SUM((h.bytes_free + h.bytes_used) - NVL(p.bytes_used, 0)) / SUM(h.bytes_used + h.bytes_free)) * 100) pct_free,
+           100 - ROUND((SUM((h.bytes_free + h.bytes_used) - NVL(p.bytes_used, 0)) / SUM(h.bytes_used + h.bytes_free)) * 100) pct_used,
+           ROUND(SUM(f.maxbytes) / 1048576) max
+    FROM   (SELECT DISTINCT * FROM sys.gv_\$TEMP_SPACE_HEADER) h,
+           (SELECT DISTINCT * FROM sys.gv_\$Temp_extent_pool) p,
+           dba_temp_files f
+    WHERE  p.file_id(+) = h.file_id
+    AND    p.tablespace_name(+) = h.tablespace_name
+    AND    f.file_id = h.file_id
+    AND    f.tablespace_name = h.tablespace_name
+    GROUP BY h.tablespace_name
+    ORDER BY 2
+) sub1
+ORDER BY used_pct DESC;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+else
+    {
+        echo "<h3>Tablespaces (Permanent & Temporary)</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>NAME</th><th>TABLESPACE_NAME</th><th>ALLOCATED_GB</th><th>USED_GB</th><th>USED_PCT</th><th>MAX_BYTES_GB</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT 
+    '<tr>' ||
+    '<td>' || c.name || '</td>' ||
+    '<td>' || a.tablespace_name || '</td>' ||
+    '<td>' || ROUND(NVL(a.physical_bytes,0)/(1024*1024*1024),2) || '</td>' ||
+    '<td>' || ROUND(NVL(b.tot_used,0)/(1024*1024*1024),2) || '</td>' ||
+    '<td class="' ||
+        CASE
+            WHEN a.physical_bytes > 0 AND ROUND((NVL(b.tot_used,0)/a.physical_bytes)*100,2) >= 90 THEN 'critico'
+            WHEN a.physical_bytes > 0 AND ROUND((NVL(b.tot_used,0)/a.physical_bytes)*100,2) >= 70 THEN 'alerta'
+            ELSE 'ok'
+        END || '">' || 
+        CASE 
+            WHEN a.physical_bytes > 0 THEN ROUND((NVL(b.tot_used,0)/a.physical_bytes)*100,2) || '%'
+            ELSE '0%'
+        END || '</td>' ||
+    '<td>' || ROUND(a.bytes_alloc/(1024*1024*1024),2) || '</td>' ||
+    '</tr>' AS html_row
+FROM (
+    SELECT con_id, tablespace_name,
+           SUM(bytes) physical_bytes,
+           SUM(DECODE(autoextensible,'NO',bytes,'YES',maxbytes)) bytes_alloc
+    FROM cdb_data_files
+    GROUP BY con_id, tablespace_name
+) a
+LEFT JOIN (
+    SELECT con_id, tablespace_name, SUM(bytes) tot_used
+    FROM cdb_segments
+    GROUP BY con_id, tablespace_name
+) b
+ON a.con_id = b.con_id AND a.tablespace_name = b.tablespace_name
+JOIN (
+    SELECT name, con_id FROM v\$containers
+) c
+ON a.con_id = c.con_id
+ORDER BY c.name, ROUND((NVL(b.tot_used,0)/NULLIF(a.physical_bytes,0))*100,2) DESC;
+
+exit;
+
+EOF
+    echo "</table>" >> "$HTML_FILE"
+
+fi
+
+}
+
+
+check_backup() {
+    {
+        echo "<h3>RMAN Backup Jobs (Últimas 24h)</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>COMMAND_ID</th><th>INPUT_TYPE</th><th>STATUS</th><th>START_TIME</th><th>END_TIME</th><th>ELAPSED_TIME</th><th>BACKUP_SIZE</th><th>OUTPUT_DEVICE</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' ||
+    '<td>' || command_id || '</td>' ||
+    '<td>' || input_type || '</td>' ||
+    '<td class ="' ||
+CASE 
+  WHEN STATUS = 'COMPLETED' THEN 'ok'
+  WHEN STATUS LIKE '%WARNING%' THEN 'alerta'
+  WHEN STATUS = 'FAILED' THEN 'critico'
+END || '">' || STATUS || '</td>' ||
+    '<td>' || TO_CHAR(start_time,'dd/mm/yyyy hh24:mi:ss') || '</td>' ||
+    '<td>' || TO_CHAR(end_time,'dd/mm/yyyy hh24:mi:ss') || '</td>' ||
+    '<td>' || TO_CHAR(TRUNC(elapsed_seconds/3600),'FM9900') || ':' ||
+              TO_CHAR(TRUNC(MOD(elapsed_seconds,3600)/60),'FM00') || ':' ||
+              TO_CHAR(MOD(elapsed_seconds,60),'FM00') || '</td>' ||
+    '<td>' || output_bytes_display || '</td>' ||
+    '<td>' || output_device_type || '</td>' ||
+    '</tr>'
+FROM v\$rman_backup_job_details
+WHERE start_time > SYSDATE - 1
+ORDER BY session_key DESC;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_dataguard() {
+    {
+        echo "<h3>Data Guard Status</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>DATABASE_ROLE</th><th>PROTECTION_MODE</th><th>SWITCHOVER_STATUS</th><th>NAME</th><th>THREAD</th><th>STANDBY_LAST_RECEIVED</th><th>STANDBY_LAST_APPLIED</th><th>STANDBY_DT_LAST_APP</th><th>MINUTOS</th><th>ARC_DIFF</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 1000
+SET TERMOUT OFF
+SET ECHO OFF
+
+
+SELECT '<tr>'
+|| '<td>' || DATABASE_ROLE || '</td>'
+|| '<td>' || PROTECTION_MODE || '</td>'
+|| '<td>' || SWITCHOVER_STATUS || '</td>'
+|| '<td>' || NAME || '</td>'
+|| '<td>' || THREAD || '</td>'
+|| '<td>' || STANDBY_LAST_RECEIVED || '</td>'
+|| '<td>' || STANDBY_LAST_APPLIED || '</td>'
+|| '<td>' || STANDBY_DT_LAST_APP || '</td>'
+|| '<td>' || MINUTOS || '</td>'
+|| '<td class="' ||
+CASE
+    WHEN ARC_DIFF > 8 THEN 'critico'
+    WHEN ARC_DIFF > 3 THEN 'alerta'
+    ELSE 'ok'
+END || '">' || ARC_DIFF || '</td>'
+|| '</tr>'
+FROM (
+    SELECT CASE WHEN ARC_DIFF <= 3 THEN ':)' WHEN ARC_DIFF > 3 AND ARC_DIFF <= 8 THEN ':|' ELSE ':(' END ST,
+           z.DATABASE_ROLE, z.PROTECTION_MODE, z.SWITCHOVER_STATUS, z.name, z.thread,
+           z.STANDBY_LAST_RECEIVED, z.STANDBY_LAST_APPLIED, z.STANDBY_DT_LAST_APP,
+           z.MINUTOS, z.ARC_DIFF
+    FROM (
+        SELECT c.DATABASE_ROLE,
+               c.PROTECTION_MODE,
+               c.SWITCHOVER_STATUS,
+               a.DEST_ID,
+               (SELECT MAX(NVL2(xx.name, xx.DEST_ID || ' - ' || xx.name, NULL))
+                FROM v\$archived_log xx
+                WHERE xx.DEST_ID = a.DEST_ID
+                  AND xx.resetlogs_change# = (SELECT resetlogs_change# FROM v\$database)
+                  AND SEQUENCE# = (SELECT MAX(yy.SEQUENCE#)
+                                   FROM v\$archived_log yy
+                                   WHERE yy.resetlogs_change# = (SELECT resetlogs_change# FROM v\$database)
+                                     AND yy.DEST_ID = xx.DEST_ID)) AS name,
+               a.thread# thread,
+               b.last_seq STANDBY_LAST_RECEIVED,
+               a.applied_seq STANDBY_LAST_APPLIED,
+               TO_CHAR(a.last_app_timestamp,'DD/MM/YYYY HH24:MI:SS') AS STANDBY_DT_LAST_APP,
+               (SYSDATE - a.last_app_timestamp) * 24 * 60 AS MINUTOS,
+               b.last_seq - a.applied_seq ARC_DIFF
+        FROM (SELECT DEST_ID, thread#,
+                     MAX(sequence#) applied_seq,
+                     MAX(next_time) last_app_timestamp
+              FROM gv\$archived_log
+              WHERE applied = 'YES'
+                AND resetlogs_change# = (SELECT resetlogs_change# FROM v\$database)
+              GROUP BY DEST_ID, thread#) a,
+             (SELECT DEST_ID, thread#,
+                     MAX(sequence#) last_seq
+              FROM gv\$archived_log
+              WHERE resetlogs_change# = (SELECT resetlogs_change# FROM v\$database)
+              GROUP BY DEST_ID, thread#) b,
+             (SELECT DATABASE_ROLE, PROTECTION_MODE, SWITCHOVER_STATUS FROM v\$database) c
+        WHERE a.thread# = b.thread#
+          AND a.DEST_ID = b.DEST_ID
+    ) z
+    WHERE UPPER(z.NAME) NOT LIKE '%ARCHIVELOG%'
+      AND ((z.DATABASE_ROLE = 'PRIMARY' AND (z.thread, z.DEST_ID) IN
+            (SELECT INST_ID thread#, DEST_ID FROM gv\$archive_dest_status WHERE STATUS <> 'INACTIVE'))
+           OR (z.DATABASE_ROLE <> 'PRIMARY'))
+    ORDER BY z.name, z.thread
+);
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+
+check_session() {
+    {
+        echo "<h3>Sessões Ativas</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>INST_ID</th><th>SID</th><th>SERIAL#</th><th>USERNAME</th><th>MACHINE</th><th>SQL_ID</th><th>ELAPSED_TIME</th><th>STATUS</th><th>EVENT</th><th>SERVICE_NAME</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 1000
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' ||
+    '<td>' || inst_id || '</td>' ||
+    '<td>' || sid || '</td>' ||
+    '<td>' || serial# || '</td>' ||
+    '<td>' || username || '</td>' ||
+    '<td>' || machine || '</td>' ||
+    '<td>' || sql_id || '</td>' ||
+    '<td>' || elapsed_time || '</td>' ||
+    '<td>' || status || '</td>' ||
+    '<td>' || event || '</td>' ||
+    '<td>' || service_name || '</td>' ||
+    '</tr>'
+FROM (
+select distinct inst_id, sid, serial#, username, machine, sql_id, elapsed_time, status, event,service_name from (
+select s.inst_id, s.sid, s.serial#, s.username, s.machine, gv.sql_text, gv.sql_id,
+TO_CHAR(TRUNC(s.last_call_et/3600),'FM9900') || ':' || TO_CHAR(TRUNC(MOD(s.last_call_et,3600)/60),'FM00') || ':' || TO_CHAR(MOD(s.last_call_et,60),'FM00') as elapsed_time,
+s.status, s.event,s.SERVICE_NAME
+from gv\$sql gv, gv\$session s
+where gv.sql_id=s.sql_id
+and gv.inst_id=s.inst_id
+and username is not null
+and s.status='ACTIVE'
+)
+) order by elapsed_time desc;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+
+check_lock() {
+    {
+        echo "<h3>Sessões com Lock (Bloqueios)</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>BLOCKING_INFO</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr><td>' || 'SID ' || l1.sid || ' está bloqueando ' || l2.sid || ' na instância ' || s.inst_id || '</td></tr>'
+FROM gv\$lock l1
+JOIN gv\$lock l2 ON l1.id1 = l2.id1 AND l1.id2 = l2.id2
+JOIN gv\$session s ON s.sid = l1.sid
+WHERE l1.block = 1
+  AND l2.request > 0;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_switch_redo() {
+    {
+        echo "<h3>Switch de Redo Logs (Últimos 7 dias)</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>DAY</th><th>00</th><th>01</th><th>02</th><th>03</th><th>04</th><th>05</th><th>06</th><th>07</th><th>08</th><th>09</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th><th>16</th><th>17</th><th>18</th><th>19</th><th>20</th><th>21</th><th>22</th><th>23</th><th>Switches_per_day</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 2000
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' ||
+    '<td>' || day || '</td>' ||
+    '<td>' || "00" || '</td>' ||
+    '<td>' || "01" || '</td>' ||
+    '<td>' || "02" || '</td>' ||
+    '<td>' || "03" || '</td>' ||
+    '<td>' || "04" || '</td>' ||
+    '<td>' || "05" || '</td>' ||
+    '<td>' || "06" || '</td>' ||
+    '<td>' || "07" || '</td>' ||
+    '<td>' || "08" || '</td>' ||
+    '<td>' || "09" || '</td>' ||
+    '<td>' || "10" || '</td>' ||
+    '<td>' || "11" || '</td>' ||
+    '<td>' || "12" || '</td>' ||
+    '<td>' || "13" || '</td>' ||
+    '<td>' || "14" || '</td>' ||
+    '<td>' || "15" || '</td>' ||
+    '<td>' || "16" || '</td>' ||
+    '<td>' || "17" || '</td>' ||
+    '<td>' || "18" || '</td>' ||
+    '<td>' || "19" || '</td>' ||
+    '<td>' || "20" || '</td>' ||
+    '<td>' || "21" || '</td>' ||
+    '<td>' || "22" || '</td>' ||
+    '<td>' || "23" || '</td>' ||
+    '<td>' || Switches_per_day || '</td>' ||
+    '</tr>'
+FROM (
+    SELECT TO_CHAR(first_time,'DD-MON') day,
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'00',1,0)) "00",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'01',1,0)) "01",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'02',1,0)) "02",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'03',1,0)) "03",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'04',1,0)) "04",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'05',1,0)) "05",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'06',1,0)) "06",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'07',1,0)) "07",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'08',1,0)) "08",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'09',1,0)) "09",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'10',1,0)) "10",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'11',1,0)) "11",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'12',1,0)) "12",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'13',1,0)) "13",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'14',1,0)) "14",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'15',1,0)) "15",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'16',1,0)) "16",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'17',1,0)) "17",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'18',1,0)) "18",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'19',1,0)) "19",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'20',1,0)) "20",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'21',1,0)) "21",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'22',1,0)) "22",
+           SUM(DECODE(TO_CHAR(first_time,'hh24'),'23',1,0)) "23",
+           COUNT(*) Switches_per_day
+    FROM gv\$log_history
+    WHERE TRUNC(first_time) BETWEEN TRUNC(SYSDATE) - 6 AND TRUNC(SYSDATE)
+    GROUP BY TO_CHAR(first_time,'DD-MON')
+    ORDER BY TO_CHAR(first_time,'DD-MON')
+);
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+check_sequence() {
+    {
+        echo "<h3>Sequences com utilização acima de 90%</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>OWNER</th><th>SEQUENCE_NAME</th><th>MAX_VALUE</th><th>INCREMENT_BY</th><th>CACHE_SIZE</th><th>LAST_NUMBER</th><th>% UTILIZADO</th><th>CYCLE_FLAG</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 1000
+SET TERMOUT OFF
+SET ECHO OFF
+
+
+SELECT '<tr>'
+|| '<td>' || SEQUENCE_OWNER || '</td>'
+|| '<td>' || SEQUENCE_NAME || '</td>'
+|| '<td>' || MAX_VALUE || '</td>'
+|| '<td>' || INCREMENT_BY || '</td>'
+|| '<td>' || CACHE_SIZE || '</td>'
+|| '<td>' || LAST_NUMBER || '</td>'
+|| '<td class="' ||
+CASE 
+    WHEN TRUNC(LAST_NUMBER/MAX_VALUE*100,2) >= 90 THEN 'critico'
+    WHEN TRUNC(LAST_NUMBER/MAX_VALUE*100,2) >= 70 THEN 'alerta'
+    ELSE 'ok'
+END || '">' || TRUNC(LAST_NUMBER/MAX_VALUE*100,2) || '%</td>'
+|| '<td>' || CYCLE_FLAG || '</td>'
+|| '</tr>'
+FROM DBA_SEQUENCES
+WHERE sequence_owner NOT IN ('SYS','SYSTEM','DBSNMP','GSMADMIN_INTERNAL','SQLTXPLAIN','XDB','WMSYS')
+  AND TRUNC(LAST_NUMBER/MAX_VALUE*100,2) > 90
+ORDER BY TRUNC(LAST_NUMBER/MAX_VALUE*100,2) DESC;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_object_invalid() {
+    {
+        echo "<h3>Objetos Inválidos</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>OWNER</th><th>OBJECT_TYPE</th><th>STATUS</th><th>COUNT</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' ||
+    '<td>' || owner || '</td>' ||
+    '<td>' || object_type || '</td>' ||
+    '<td>' || status || '</td>' ||
+    '<td>' || COUNT(*) || '</td>' ||
+    '</tr>'
+FROM dba_objects
+WHERE status <> 'VALID'
+GROUP BY owner, object_type, status
+ORDER BY owner DESC;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_index_invalid() {
+    {
+        echo "<h3>Índices Inválidos ou Inutilizáveis</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>OWNER</th><th>STATUS</th><th>COUNT</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 500
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' ||
+    '<td>' || owner || '</td>' ||
+    '<td>' || status || '</td>' ||
+    '<td>' || COUNT(*) || '</td>' ||
+    '</tr>'
+FROM (
+    SELECT owner, INDEX_NAME, STATUS
+    FROM dba_indexes
+    WHERE STATUS NOT IN ('VALID','N/A')
+    UNION ALL
+    SELECT index_owner, INDEX_NAME, STATUS
+    FROM dba_ind_partitions
+    WHERE STATUS NOT IN ('USABLE','N/A')
+    UNION ALL
+    SELECT index_owner, INDEX_NAME, STATUS
+    FROM dba_ind_subpartitions
+    WHERE STATUS <> 'USABLE'
+)
+GROUP BY owner, status
+ORDER BY owner DESC;
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+check_statistcs_outdated() {
+    {
+        echo "<h3>Estatísticas Desatualizadas (Tabelas e Índices)</h3>"
+        echo "<table border='1' cellpadding='5' cellspacing='0'>"
+        echo "<tr><th>OWNER</th><th>LAST_ANALYZED_MAIS_ANTIGO</th><th>QTDE_OBJETOS_DESATUALIZADOS</th><th>TIPO_OBJETO</th></tr>"
+    } >> "$HTML_FILE"
+
+    sqlplus -s /@$ORACLE_SID >> "$HTML_FILE" <<EOF
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 1000
+SET TERMOUT OFF
+SET ECHO OFF
+
+SELECT
+    '<tr>' ||
+    '<td>' || OWNER || '</td>' ||
+    '<td>' || NVL(TO_CHAR(LAST_ANALYZED_MAIS_ANTIGO,'DD/MM/YYYY HH24:MI:SS'),'NUNCA ANALISADO') || '</td>' ||
+    '<td>' || QTDE_OBJETOS_DESATUALIZADOS || '</td>' ||
+    '<td>' || TIPO_OBJETO || '</td>' ||
+    '</tr>'
+FROM (
+    SELECT OWNER,
+           MIN(LAST_ANALYZED) AS LAST_ANALYZED_MAIS_ANTIGO,
+           COUNT(*) AS QTDE_OBJETOS_DESATUALIZADOS,
+           'TABLE' AS TIPO_OBJETO
+    FROM DBA_TAB_STATISTICS
+    WHERE LAST_ANALYZED IS NULL OR LAST_ANALYZED < SYSDATE - 1
+    GROUP BY OWNER
+    UNION ALL
+    SELECT OWNER,
+           MIN(LAST_ANALYZED) AS LAST_ANALYZED_MAIS_ANTIGO,
+           COUNT(*) AS QTDE_OBJETOS_DESATUALIZADOS,
+           'INDEX' AS TIPO_OBJETO
+    FROM DBA_IND_STATISTICS
+    WHERE LAST_ANALYZED IS NULL OR LAST_ANALYZED < SYSDATE - 1
+    GROUP BY OWNER
+    ORDER BY OWNER, TIPO_OBJETO
+);
+
+EXIT;
+EOF
+
+    echo "</table>" >> "$HTML_FILE"
+}
+
+
+checklist() {
+    cabecalho
+    get_db_version
+    check_instance
+if [[ $DB_VERSION_NUMERIC -gt 11 ]]; then
+    check_pdb
+fi
+    check_resource_limit
+    check_diskgroup
+    check_recovery_area
+    check_recovery_file
+    check_tablespace
+    check_backup
+    check_dataguard
+    check_session
+    check_lock
+    check_switch_redo
+    check_sequence
+    check_object_invalid
+    check_index_invalid
+    check_statistcs_outdated
+    rodape
+    send_email
+}
+
+# Executa checklist
+checklist
+
+
